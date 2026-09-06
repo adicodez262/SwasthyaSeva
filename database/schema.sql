@@ -1,87 +1,91 @@
 -- =====================================================================
--- SIH Rural Healthcare Project — Database Schema (PostgreSQL / Supabase)
--- Owner: DB module
--- Do not change field names/types without notifying the team.
+-- SIH Rural Healthcare Project — Database Schema v3 (PostgreSQL / Supabase)
+-- patients table rebuilt to match the ML engineer's exact feature list.
+-- CONFIRM THE INT ENCODINGS BELOW WITH THE ML ENGINEER BEFORE BACKEND
+-- BUILDS AGAINST THIS — placeholders are marked with "ASSUMED".
 -- =====================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ---------------------------------------------------------------------
--- TABLE: asha_workers
--- Login/identity for the ASHA/ANM worker using the app.
+-- TABLE: asha_workers  (unchanged)
 -- ---------------------------------------------------------------------
 CREATE TABLE asha_workers (
-    asha_id         TEXT PRIMARY KEY,       -- government-issued ASHA card number
+    asha_id         TEXT PRIMARY KEY,
     name            TEXT NOT NULL,
     phone_number    TEXT NOT NULL UNIQUE,
-    pin_hash        TEXT NOT NULL           -- store a HASHED pin (e.g. bcrypt), never plaintext
+    pin_hash        TEXT NOT NULL
 );
 
 -- ---------------------------------------------------------------------
 -- TABLE: patients
--- One row per vitals-recording VISIT (a person can have multiple visits
--- over time — needed for history and future trend-based ML features).
--- Fields exactly match the agreed contract.
+-- One row per visit. Identity/bookkeeping fields kept from the
+-- original contract; health/vitals fields replaced with the ML
+-- engineer's exact feature list below.
 -- ---------------------------------------------------------------------
 CREATE TABLE patients (
-    record_id               UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- surrogate key for GET /api/patient/{id}
+    -- ---- Identity / bookkeeping (kept — app needs these regardless of ML) ----
+    record_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id           TEXT NOT NULL,
+    name                  TEXT NOT NULL,
+    gender                TEXT,                      -- NOT an ML feature in the current list; kept for app/display use only
+    timestamp             TIMESTAMPTZ NOT NULL,       -- when vitals were recorded on-device
+    device_id             TEXT NOT NULL,
+    asha_id               TEXT REFERENCES asha_workers (asha_id),
+    synced_at             TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    -- ---- Core ----
-    patient_id               TEXT NOT NULL,
-    name                      TEXT NOT NULL,
-    age                       INT NOT NULL CHECK (age >= 0 AND age <= 130),
-    gender                    TEXT NOT NULL,
-    bp_systolic               INT NOT NULL,
-    bp_diastolic              INT NOT NULL,
-    sugar_level               NUMERIC(6,2) NOT NULL,   -- random blood sugar, mg/dL
+    -- ---- ML feature set (exact fields the model trains on) ----
+    "Age"                       INT NOT NULL CHECK ("Age" >= 0 AND "Age" <= 130),
+    is_pregnant                 INT CHECK (is_pregnant IN (0, 1)),                  -- 0 = no, 1 = yes
+    height_cm                   FLOAT,
+    weight_kg                   FLOAT,
+    bmi                          FLOAT GENERATED ALWAYS AS (
+                                     CASE
+                                         WHEN height_cm IS NOT NULL AND height_cm > 0 AND weight_kg IS NOT NULL
+                                         THEN ROUND((weight_kg / ((height_cm / 100.0) ^ 2))::numeric, 2)::float
+                                         ELSE NULL
+                                     END
+                                  ) STORED,                                          -- auto-calculated, never sent by client
+    smoking_status               INT CHECK (smoking_status IN (0, 1, 2)),           -- ASSUMED: 0=no, 1=yes, 2=former — CONFIRM
+    alcohol_use                  INT CHECK (alcohol_use IN (0, 1)),                 -- ASSUMED: 0=no, 1=yes — CONFIRM
+    physical_activity            INT CHECK (physical_activity IN (0, 1, 2)),        -- ASSUMED: 0=low, 1=moderate, 2=high — CONFIRM
+    known_diabetic                INT CHECK (known_diabetic IN (0, 1)),
+    known_hypertensive            INT CHECK (known_hypertensive IN (0, 1)),
+    on_medication                  INT CHECK (on_medication IN (0, 1)),
+    family_history_diabetes        INT CHECK (family_history_diabetes IN (0, 1)),
+    family_history_hypertension    INT CHECK (family_history_hypertension IN (0, 1)),
+    family_history_heart_disease   INT CHECK (family_history_heart_disease IN (0, 1)),
+    acute_fever_symptoms            INT CHECK (acute_fever_symptoms IN (0, 1)),
+    "Body_Temp_F"                    FLOAT,
+    pulse_rate                        INT,
+    "Systolic_BP"                     FLOAT NOT NULL,
+    "Diastolic_BP"                    FLOAT NOT NULL,
+    "Blood_Sugar_Fasting"             FLOAT,
+    "SPO2"                             FLOAT,
+    "Hemoglobin_Level"                 FLOAT,
 
-    -- ---- Additional (for ML accuracy) ----
-    weight_kg                 NUMERIC(5,2),
-    height_cm                 NUMERIC(5,2),
-    bmi                       NUMERIC(5,2) GENERATED ALWAYS AS (
-                                  CASE
-                                      WHEN height_cm IS NOT NULL AND height_cm > 0 AND weight_kg IS NOT NULL
-                                      THEN ROUND((weight_kg / ((height_cm / 100.0) ^ 2))::numeric, 2)
-                                      ELSE NULL
-                                  END
-                               ) STORED,               -- auto-calculated, client never sends this
-    waist_circumference_cm    NUMERIC(5,2),            -- optional
-    pulse_rate                INT,
-    smoking_status            TEXT CHECK (smoking_status IN ('yes', 'no', 'former')),
-    alcohol_use               TEXT CHECK (alcohol_use IN ('yes', 'no')),
-    physical_activity         TEXT CHECK (physical_activity IN ('low', 'moderate', 'high')),
-    family_history_diabetes         BOOLEAN,
-    family_history_hypertension     BOOLEAN,
-    family_history_heart_disease    BOOLEAN,
-    existing_diagnosis         TEXT CHECK (existing_diagnosis IN ('diabetes', 'hypertension', 'both', 'none')),
-    on_medication               BOOLEAN,
-    pregnancy_status            TEXT CHECK (pregnancy_status IN ('yes', 'no', 'na')),
-    symptoms                    TEXT,                  -- optional
+    -- ---- Deltas (computed at insert time from the patient's previous visit;
+    --      NULL on a patient's first-ever visit — never default to 0) ----
+    "Delta_SystolicBP"                  FLOAT,
+    "Delta_Hemoglobin"                   FLOAT,
+    "Delta_BloodSugar"                    FLOAT,
 
-    -- ---- ML output ----
-    timestamp                    TIMESTAMPTZ NOT NULL,  -- when vitals were recorded on-device
-    risk_level                   TEXT CHECK (risk_level IN ('low', 'moderate', 'critical')), -- NULL until ML runs
-
-    -- ---- Offline-sync support ----
-    synced_at                    TIMESTAMPTZ,           -- NULL = not yet synced
-    device_id                    TEXT NOT NULL,         -- per contract
-
-    -- ---- Link to worker (addition — confirm with team) ----
-    asha_id                      TEXT REFERENCES asha_workers (asha_id),
-
-    created_at                   TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- ---- ML output / target label ----
+    "Triage_Action"                        INT CHECK ("Triage_Action" IN (0, 1, 2))  -- ASSUMED: 0=low, 1=moderate, 2=critical — CONFIRM, NULL until ML runs
 );
 
 CREATE INDEX idx_patients_patient_id ON patients (patient_id);
-CREATE INDEX idx_patients_risk_level ON patients (risk_level);
+CREATE INDEX idx_patients_triage     ON patients ("Triage_Action");
 CREATE INDEX idx_patients_unsynced   ON patients (synced_at) WHERE synced_at IS NULL;
 CREATE INDEX idx_patients_device_id  ON patients (device_id);
 CREATE INDEX idx_patients_asha_id    ON patients (asha_id);
 
 -- ---------------------------------------------------------------------
--- TABLE: alerts
--- Separate queue table — has its own pending/sent lifecycle and
--- snapshots vitals at alert time via `payload`.
+-- TABLE: alerts  (unchanged — still keyed off record_id)
+-- Note: alert-triggering logic (moderate -> teleconsult, critical -> referral)
+-- now reads Triage_Action instead of the old text risk_level. Backend needs
+-- to know the confirmed int mapping above before wiring this up.
 -- ---------------------------------------------------------------------
 CREATE TABLE alerts (
     alert_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,10 +105,11 @@ CREATE INDEX idx_alerts_patient_id ON alerts (patient_id);
 CREATE INDEX idx_alerts_record_id  ON alerts (record_id);
 
 -- ---------------------------------------------------------------------
--- API endpoint mapping (for Backend dev)
+-- API endpoint mapping
 -- ---------------------------------------------------------------------
--- POST /api/patient       -> INSERT INTO patients (omit record_id, bmi, created_at)
+-- POST /api/patient       -> INSERT INTO patients (omit record_id, bmi, created_at, Delta_* on first visit)
 -- GET  /api/patient/{id}  -> SELECT * FROM patients WHERE record_id = $1
 -- GET  /api/patients      -> SELECT * FROM patients ORDER BY created_at DESC
--- POST /api/predict       -> hits ML service, not this DB
+-- POST /api/predict       -> hits ML service; response {Triage_Action, confidence} written back to this row
 -- POST /api/alert         -> INSERT INTO alerts (status='pending'), later UPDATE status/sent_at
+--                            triggered when Triage_Action = 1 (teleconsult) or 2 (referral) -- CONFIRM mapping first

@@ -1,59 +1,49 @@
-# DB Handoff — SIH Rural Healthcare Project
+# DB Handoff — SIH Rural Healthcare Project (v3)
 
-**Engine:** PostgreSQL (Supabase). Three tables: `asha_workers`, `patients`, `alerts`.
+**Engine:** PostgreSQL (Supabase). Tables: `asha_workers`, `patients`, `alerts`.
+
+## ⚠️ Open items — confirm before Backend/ML build against this
+
+1. **Int encodings are placeholders.** These need sign-off from the ML engineer:
+   - `smoking_status`: assumed 0=no, 1=yes, 2=former
+   - `alcohol_use`: assumed 0=no, 1=yes
+   - `physical_activity`: assumed 0=low, 1=moderate, 2=high
+   - `Triage_Action`: assumed 0=low, 1=moderate, 2=critical
+   All other `_int` fields (is_pregnant, known_diabetic, known_hypertensive, on_medication, family_history_*, acute_fever_symptoms) are assumed simple 0/1 flags.
+   If any of these are wrong, update the `CHECK` constraints in `schema.sql` and re-run.
+
+2. **Mixed-case column names.** A few columns (`Age`, `Body_Temp_F`, `Systolic_BP`, `Diastolic_BP`, `Blood_Sugar_Fasting`, `SPO2`, `Hemoglobin_Level`, `Delta_SystolicBP`, `Delta_Hemoglobin`, `Delta_BloodSugar`, `Triage_Action`) were kept in the exact casing the ML engineer specified. Postgres is case-sensitive for quoted identifiers — any SQL touching these **must** wrap them in double quotes (e.g. `"Systolic_BP"`), or Postgres will silently fold them to lowercase and fail to find them. This is a common source of confusing bugs — if the team wants to avoid it, we can rename everything to lowercase (`systolic_bp`) and have the ML engineer rename columns on their end instead. Recommend deciding now rather than after Backend has code written against one casing.
+
+3. **`gender` is kept but not an ML feature.** It's in the table for app/display purposes only; it's not sent to the model.
 
 ## Setup
 
-1. Create a Supabase project, note the DB password.
-2. Run `schema.sql` in the Supabase SQL Editor.
-3. Confirm `asha_workers`, `patients`, `alerts` exist in Table Editor.
-4. Copy `.env.example` → `.env`, fill in your connection string (Project Settings → Database → Connection string).
-5. `pip install psycopg2-binary python-dotenv` then `python test_db.py`.
+1. Run `schema.sql` in Supabase SQL Editor.
+2. Copy `.env.example` → `.env`, fill in your connection string.
+3. `pip install psycopg2-binary python-dotenv`, then `python test_db.py`.
 
-## Tables
+## `patients` table — field reference
 
-### `asha_workers` — login
-| Field | Type | Notes |
-|---|---|---|
-| asha_id (PK) | text | ASHA card number |
-| name | text | |
-| phone_number | text | unique |
-| pin_hash | text | hashed, never plaintext |
+**Identity/bookkeeping (not ML features):**
+record_id, patient_id, name, gender, timestamp, device_id, asha_id, synced_at, created_at
 
-### `patients` — one row per visit
-Matches the agreed contract field-for-field, plus:
-- `record_id` (UUID, PK) — surrogate key for `GET /api/patient/{id}`
-- `bmi` — auto-calculated by the DB from weight/height, client never sends it
-- `asha_id` — FK to `asha_workers`, **added beyond the original contract** so each visit can be traced to the worker who recorded it. Confirm with the team; drop if `device_id` alone is enough.
-- `created_at` — server-side insert time
+**ML feature set (exact list from ML engineer):**
+Age, is_pregnant, height_cm, weight_kg, bmi (auto-calculated, never sent by client), smoking_status, alcohol_use, physical_activity, known_diabetic, known_hypertensive, on_medication, family_history_diabetes, family_history_hypertension, family_history_heart_disease, acute_fever_symptoms, Body_Temp_F, pulse_rate, Systolic_BP, Diastolic_BP, Blood_Sugar_Fasting, SPO2, Hemoglobin_Level
 
-All other fields (patient_id, name, age, gender, bp_systolic, bp_diastolic, sugar_level, weight_kg, height_cm, waist_circumference_cm, pulse_rate, smoking_status, alcohol_use, physical_activity, family_history_*, existing_diagnosis, on_medication, pregnancy_status, symptoms, timestamp, risk_level, synced_at, device_id) are exactly as specified in the contract.
+**Deltas** (computed at insert time as this-visit minus previous-visit for the same `patient_id`; NULL on a patient's first visit — never 0):
+Delta_SystolicBP, Delta_Hemoglobin, Delta_BloodSugar
 
-### `alerts` — teleconsult/referral queue
-| Field | Type | Notes |
-|---|---|---|
-| alert_id (PK) | UUID | |
-| record_id (FK) | UUID | → patients.record_id |
-| patient_id | text | denormalized for quick lookup |
-| alert_type | text | teleconsult / referral |
-| status | text | pending / sent / failed |
-| target | text | hospital / e-Sanjeevani endpoint |
-| payload | jsonb | vitals snapshot at alert time |
-| retry_count | int | |
-| created_at, sent_at | timestamptz | |
+**ML output:**
+Triage_Action (int, NULL until `/api/predict` runs)
 
 ## API mapping
 
-- `POST /api/patient` → INSERT into `patients` (omit `record_id`, `bmi`, `created_at`)
+- `POST /api/patient` → INSERT into `patients` (omit `record_id`, `bmi`, `created_at`; omit Delta_* on a patient's first visit or compute them from the last row with matching `patient_id`)
 - `GET /api/patient/{id}` → SELECT WHERE `record_id = {id}`
 - `GET /api/patients` → SELECT * ORDER BY `created_at` DESC
-- `POST /api/predict` → hits ML service, not this DB
-- `POST /api/alert` → INSERT into `alerts`, later UPDATE `status`/`sent_at`
+- `POST /api/predict` → hits ML service; response written back as `Triage_Action` (+ confidence, if you decide to store it)
+- `POST /api/alert` → triggered based on `Triage_Action` (1 = teleconsult, 2 = referral, per assumed mapping above — confirm before wiring this into Backend)
 
 ## Credentials
 
-Real `DATABASE_URL` goes to Backend dev only, over a private channel. `.env` is gitignored — only `.env.example` lives in the repo.
-
-## Open item
-
-`asha_id` on `patients` is an addition beyond your original contract text — flag it to the team before Backend builds against it.
+Real `DATABASE_URL` goes to Backend dev only, over a private channel — never committed. `.env` is gitignored; only `.env.example` lives in the repo.

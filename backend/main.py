@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 # Initialize the FastAPI application
 app = FastAPI(
@@ -38,4 +39,25 @@ def health_check():
     """
     return {
         "status": "healthy"
+    }
+
+
+# Pydantic model for incoming patient vital signs
+class PatientData(BaseModel):
+    age: int
+    bp_systolic: int
+    bp_diastolic: int
+    sugar_level: float
+    heart_rate: int
+
+
+@app.post("/api/predict")
+def predict_risk(data: PatientData):
+    """
+    Temporary mock prediction endpoint.
+    Accepts patient vitals and returns a simulated risk prediction.
+    """
+    return {
+        "risk_level": "moderate",
+        "confidence": 0.82
     }

@@ -1,0 +1,103 @@
+{
+  "app": {
+    "title": "Swasthya Seva",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "add_patient": "Add Patient",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "welcome": "Good morning, ASHA Worker",
+    "total": "Total",
+    "critical": "Critical",
+    "moderate": "Moderate",
+    "low": "Low",
+    "search_placeholder": "Search patient...",
+    "filter_risk": "Filter by Risk",
+    "filter_gender": "Filter by Gender",
+    "add_patient_btn": "+ Add Patient"
+  },
+  "patient_table": {
+    "id": "Patient ID",
+    "name": "Name",
+    "age": "Age",
+    "gender": "Gender",
+    "bp": "Blood Pressure",
+    "sugar": "Blood Sugar",
+    "risk": "Risk Level",
+    "action": "Action",
+    "view": "View"
+  },
+  "add_patient": {
+    "title": "Add Patient",
+    "step1": "Basic Details",
+    "step2": "Vitals",
+    "step3": "Lifestyle & History",
+    "step4": "Medical",
+    "step5": "Review",
+    "next": "Next",
+    "back": "Back",
+    "submit": "Check Risk & Save",
+    "edit": "Edit",
+    "required_age": "Please enter the patient's age.",
+    "required_name": "Please enter the patient's name.",
+    "saved_locally": "Saved locally"
+  },
+  "fields": {
+    "name": "Patient Name",
+    "age": "Age",
+    "gender": "Gender",
+    "male": "Male",
+    "female": "Female",
+    "other": "Other",
+    "bp_systolic": "Systolic",
+    "bp_diastolic": "Diastolic",
+    "blood_sugar": "Random Blood Sugar (mg/dL)",
+    "pulse": "Pulse Rate (BPM)",
+    "weight": "Weight (kg)",
+    "height": "Height (cm)",
+    "bmi": "BMI",
+    "auto_calculated": "Auto-calculated",
+    "smoking": "Smoking Status",
+    "alcohol": "Alcohol",
+    "activity": "Physical Activity",
+    "yes": "Yes",
+    "no": "No",
+    "former": "Former",
+    "low": "Low",
+    "moderate": "Moderate",
+    "high": "High",
+    "family_diabetes": "Family History: Diabetes",
+    "family_hypertension": "Family History: Hypertension",
+    "family_heart": "Family History: Heart Disease",
+    "existing_diagnosis": "Existing Diagnosis",
+    "diabetes": "Diabetes",
+    "hypertension": "Hypertension",
+    "both": "Both",
+    "none": "None",
+    "medication": "On Medication?",
+    "pregnancy": "Pregnancy Status",
+    "na": "N/A",
+    "symptoms": "Symptoms",
+    "symptoms_placeholder": "Enter symptoms...",
+    "save_patient": "Save Patient"
+  },
+  "alerts": {
+    "critical_title": "🚨 CRITICAL RISK",
+    "critical_msg": "Refer patient to nearest PHC/hospital now.",
+    "moderate_title": "🟠 MODERATE RISK",
+    "moderate_msg": "Teleconsult request queued — will send when online.",
+    "low_title": "🟢 LOW RISK",
+    "low_msg": "Patient record saved successfully.",
+    "offline_error": "Unable to connect. Your information has been saved locally and will be synced when the connection is restored."
+  },
+  "details": {
+    "title": "Patient Details",
+    "queued": "Queued — Waiting for Internet",
+    "back_dashboard": "Back to Dashboard"
+  }
+}

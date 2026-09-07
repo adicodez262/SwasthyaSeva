@@ -3,3 +3,6 @@ __pycache__/
 
 .env
 backend/main.py.backup
+
+frontend/node_modules/
+frontend/dist/

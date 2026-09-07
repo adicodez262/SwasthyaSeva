@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { mockApi } from '../services/mockApi';
 
 const NetworkContext = createContext();
 
@@ -6,11 +7,18 @@ export const NetworkProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      mockApi.syncOfflinePatients().catch(console.error);
+    };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    if (navigator.onLine) {
+      mockApi.syncOfflinePatients().catch(console.error);
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -20,7 +28,13 @@ export const NetworkProvider = ({ children }) => {
 
   // For demo purposes, allow manual toggling of network state
   const toggleNetwork = () => {
-    setIsOnline(prev => !prev);
+    setIsOnline(prev => {
+      const next = !prev;
+      if (next) {
+        mockApi.syncOfflinePatients().catch(console.error);
+      }
+      return next;
+    });
   };
 
   return (

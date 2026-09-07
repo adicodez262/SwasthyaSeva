@@ -32,7 +32,14 @@ const Dashboard = () => {
   const [filterGender, setFilterGender] = useState('all');
 
   useEffect(() => {
-    mockApi.getPatients().then(setPatients).catch(console.error).finally(() => setLoading(false));
+    const fetchPatients = () => {
+      mockApi.getPatients().then(setPatients).catch(console.error).finally(() => setLoading(false));
+    };
+    fetchPatients();
+    window.addEventListener('asha_data_updated', fetchPatients);
+    return () => {
+      window.removeEventListener('asha_data_updated', fetchPatients);
+    };
   }, []);
 
   const isRiskMatch = (pRisk, filterVal) => {

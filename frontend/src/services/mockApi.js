@@ -63,6 +63,8 @@ const buildFastApiPayload = (patientData, patientId) => {
   };
 };
 
+let isSyncing = false;
+
 export const mockApi = {
   getPatients: async () => {
     return getStoredPatients();
@@ -154,6 +156,66 @@ export const mockApi = {
 
     localStorage.setItem('asha_patients', JSON.stringify([newPatient, ...patients]));
     return newPatient;
+  },
+
+  syncOfflinePatients: async () => {
+    if (isSyncing) {
+      return { syncedCount: 0, status: 'already_syncing' };
+    }
+    isSyncing = true;
+    let syncedCount = 0;
+
+    try {
+      const patients = getStoredPatients();
+      const offlinePatients = patients.filter(p => p.savedLocally === true);
+
+      if (offlinePatients.length === 0) {
+        return { syncedCount: 0, status: 'nothing_to_sync' };
+      }
+
+      let queue = getStoredQueue();
+
+      for (const p of patients) {
+        if (!p.savedLocally) continue;
+
+        try {
+          const payload = buildFastApiPayload(p, p.patient_id);
+          const response = await fetch(`${API_BASE_URL}/api/patient`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            p.savedLocally = false;
+            p.risk_level = result.risk_level;
+            p.confidence = result.confidence;
+            p.status = (result.risk_level === 'YELLOW' || result.risk_level === 'moderate') ? 'queued' : 'saved';
+            p.syncedAt = new Date().toISOString();
+
+            queue = queue.filter(id => id !== p.patient_id);
+            localStorage.setItem('asha_patients', JSON.stringify(patients));
+            localStorage.setItem('asha_teleconsult_queue', JSON.stringify(queue));
+            syncedCount++;
+          } else {
+            console.error(`Failed to sync patient ${p.patient_id}:`, response.statusText);
+            break;
+          }
+        } catch (err) {
+          console.error(`Network error syncing patient ${p.patient_id}:`, err);
+          break;
+        }
+      }
+
+      if (syncedCount > 0 && typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('asha_data_updated'));
+      }
+
+      return { syncedCount, status: 'completed' };
+    } finally {
+      isSyncing = false;
+    }
   },
 
   queueTeleconsultation: async (patientId) => {

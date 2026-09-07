@@ -4,6 +4,7 @@ from typing import Optional
 import joblib
 import pandas as pd
 import psycopg2
+from psycopg2.extras import Json, RealDictCursor
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -301,6 +302,24 @@ def create_patient_assessment(data: PatientAssessmentRequest):
     try:
         with conn.cursor() as cur:
             cur.execute(query, params)
+            record_id = cur.fetchone()[0]
+
+            if prediction in (1, 2):
+                alert_type = "teleconsult" if prediction == 1 else "referral"
+                target = "e-Sanjeevani Teleconsult" if prediction == 1 else "District Hospital / PHC"
+                payload = {
+                    "risk_level": RISK_LABELS[prediction],
+                    "confidence": confidence,
+                    "systolic_bp": data.Systolic_BP,
+                    "blood_sugar": data.Blood_Sugar_Fasting,
+                    "spo2": data.SPO2,
+                }
+                alert_query = """
+                    INSERT INTO alerts (record_id, patient_id, alert_type, status, target, payload)
+                    VALUES (%s, %s, %s, %s, %s, %s);
+                """
+                cur.execute(alert_query, (record_id, data.patient_id, alert_type, "pending", target, Json(payload)))
+
             conn.commit()
     except Exception as e:
         conn.rollback()
@@ -314,3 +333,41 @@ def create_patient_assessment(data: PatientAssessmentRequest):
         "risk_level": RISK_LABELS[prediction],
         "confidence": confidence,
     }
+
+
+# ---------------------------------------------------------------------------
+# ALERTS API ENDPOINT
+# ---------------------------------------------------------------------------
+@app.get("/api/alerts")
+def get_alerts(status: Optional[str] = None):
+    """
+    Returns alerts ordered by newest first, optionally filtered by status (pending, sent, failed).
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if status:
+                cur.execute(
+                    """
+                    SELECT alert_id, record_id, patient_id, alert_type, status, target, payload, retry_count, created_at, sent_at
+                    FROM alerts
+                    WHERE status = %s
+                    ORDER BY created_at DESC;
+                    """,
+                    (status,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT alert_id, record_id, patient_id, alert_type, status, target, payload, retry_count, created_at, sent_at
+                    FROM alerts
+                    ORDER BY created_at DESC;
+                    """
+                )
+            alerts = cur.fetchall()
+            return alerts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    finally:
+        conn.close()
+

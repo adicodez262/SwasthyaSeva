@@ -2,17 +2,28 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 export const normalizeRiskLevel = (riskLevel) => {
-  if (!riskLevel) return 'low';
-  const r = String(riskLevel).toUpperCase();
-  if (r.includes('RED') || r.includes('CRITICAL')) return 'critical';
-  if (r.includes('YELLOW') || r.includes('MODERATE')) return 'moderate';
-  if (r.includes('GREEN') || r.includes('LOW')) return 'low';
+  if (!riskLevel && riskLevel !== 0) return 'low';
+  const r = String(riskLevel).trim().toUpperCase();
+  if (r === '2' || r.includes('RED') || r.includes('CRITICAL') || r.includes('HIGH')) return 'critical';
+  if (r === '1' || r.includes('YELLOW') || r.includes('MODERATE')) return 'moderate';
+  if (r === '0' || r.includes('GREEN') || r.includes('LOW')) return 'low';
   return 'low';
+};
+
+export const RISK_DISPLAY_MAP = {
+  low: 'LOW RISK',
+  moderate: 'MODERATE RISK',
+  critical: 'HIGH RISK',
+};
+
+export const getRiskDisplay = (riskLevel) => {
+  const normalized = normalizeRiskLevel(riskLevel);
+  return RISK_DISPLAY_MAP[normalized] || 'LOW RISK';
 };
 
 export const RiskBadge = ({ riskLevel }) => {
   const { t } = useTranslation();
-  if (!riskLevel) return null;
+  if (!riskLevel && riskLevel !== 0) return null;
 
   const normalized = normalizeRiskLevel(riskLevel);
   const cls = { critical: 'badge-critical', moderate: 'badge-moderate', low: 'badge-low' }[normalized] || 'badge-low';
@@ -21,7 +32,7 @@ export const RiskBadge = ({ riskLevel }) => {
   return (
     <span className={`badge ${cls}`}>
       <div className={`badge-dot ${dotCls}`}></div>
-      {riskLevel.toUpperCase()}
+      {getRiskDisplay(riskLevel)}
     </span>
   );
 };

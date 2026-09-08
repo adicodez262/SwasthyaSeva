@@ -72,9 +72,15 @@ export const RiskAlert = ({ riskLevel }) => {
 
       {normalized === 'moderate' && (
         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap' }}>
-          <button className="btn btn-primary" style={{ backgroundColor: 'var(--color-warning)', borderColor: 'var(--color-warning)', color: 'white' }} onClick={() => alert('Connecting to e-Sanjeevani...')}>
+          <a
+            href="https://esanjeevani.mohfw.gov.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            style={{ backgroundColor: 'var(--color-warning)', borderColor: 'var(--color-warning)', color: 'white', textDecoration: 'none' }}
+          >
             💻 e-Sanjeevani Teleconsult
-          </button>
+          </a>
         </div>
       )}
     </div>
